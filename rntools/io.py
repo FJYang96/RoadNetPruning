@@ -8,7 +8,10 @@ from rntools.demand import Demand
 def download_road_network(place_query, find_scc=True):
     '''
     Place query can be a dictionary or a string, for example:
-        place_query = {'city':'San Francisco', 'state':'California', 'country':'USA'}, or
+        place_query = {'city':'San Francisco',
+                       'state':'California',
+                       'country':'USA'}
+        or,
         place_query = "Kamppi, Helsinki, Finland"
     '''
     rn = ox.graph_from_place(place_query, network_type='drive')
@@ -58,7 +61,7 @@ def read_MATSim_network(directory):
         e['to'] = int(e['to'])
         e['length'] = float(e['length'])
         e['freespeed'] = float(e['freespeed'])
-        e['cost'] = float(e['freespeed'])
+        e['weight'] = float(e['freespeed'])
         e['capacity'] = float(e['capacity'])
         e['permlanes'] = float(e['permlanes'])
         e['oneway'] = int(e['oneway'])
@@ -81,7 +84,7 @@ def read_MATSim_network(directory):
     
     return G
 
-def read_MATSim_demand(directory, G):
+def read_MATSim_demand(directory, G, verbose=False):
     tree = ET.parse(directory)
 
     root = tree.getroot()
@@ -115,7 +118,8 @@ def read_MATSim_demand(directory, G):
             o_ind = edge_id_to_ind[o]
             d_ind = edge_id_to_ind[d]
         except:
-            print('cannot match od pair to nodes in the network')
+            if verbose:
+                print('cannot match od pair to nodes in the network')
             continue
         
         o_node = edges[o_ind][0]

@@ -60,8 +60,9 @@ class OptimizationSparsifier(Sparsifier):
         # Quantities that are useful in building the program
         self.N = len(self.G.nodes)
         self.M = len(self.G.edges)
-        self.cost = np.array([self.G.edges[e]['cost'] \
+        self.cost = np.array([self.G.edges[e]['weight'] \
                                   for e in self.G.edges])
+        self.max_cost = np.max(self.cost)
         self.capacity = np.array([self.G.edges[e]['capacity'] \
                                   for e in self.G.edges])
         self.node_to_ind = {n:i for (i,n) in enumerate(self.G.nodes)}
@@ -96,8 +97,8 @@ class LPSparsifier(OptimizationSparsifier):
         lbda is the weight of L1 regularization of flow
         """
         self.add_flow_constraints(phi=self.phi, num_samples=self.num_samples)
-        self.objective += self.cost.T * self.solution + \
-            self.lbda * cp.sum(self.solution / self.capacity)
+        self.objective += self.cost.T * self.solution / self.max_cost + \
+            self.lbda * cp.sum(self.solution)
         self.prob = cp.Problem(cp.Minimize(self.objective), self.constraints)
 
     def add_flow_constraints(self, phi=0, num_samples=24):
@@ -116,10 +117,10 @@ class LPSparsifier(OptimizationSparsifier):
                                  self.flows[i] >= 0]
         self.constraints += [self.solution <= self.capacity]
 
-    def solve(self, verbose=False):
+    def solve(self, verbose=False, solver_verbose=False):
         ''' Solve the LP '''
         self.construct_program()
-        self.prob.solve(solver='GUROBI', verbose=verbose)
+        self.prob.solve(solver='GUROBI', verbose=solver_verbose)
         if self.objective.value is None or np.isinf(self.objective.value):
             print('Sparsification Failed')
             print('Cannot route the demand')
@@ -129,7 +130,7 @@ class LPSparsifier(OptimizationSparsifier):
         self.solution = self.solution.value
         self.num_useful_edges = len(np.nonzero(self.solution)[0])
         self.solved=True
-        if not verbose:
+        if verbose:
             print('Sparsification Successful')
             print('The graph has',self.num_useful_edges,'edges')
         return True
@@ -139,6 +140,20 @@ class LPSparsifier(OptimizationSparsifier):
             return np.dot(self.solution, self.cost)
         else:
             return np.inf
+
+class WeightedLPSparsifier(LPSparsifier):
+    '''
+    Basically identical to LP Sparsifier; However, here the regularizer weights 
+    the edges inversely by their capacity
+    '''
+    def construct_program(self):
+        """
+        lbda is the weight of L1 regularization of flow
+        """
+        self.add_flow_constraints(phi=self.phi, num_samples=self.num_samples)
+        self.objective += self.cost.T * self.solution / self.max_cost + \
+            self.lbda * cp.sum(self.solution / self.capacity) * np.mean(self.capacity)
+        self.prob = cp.Problem(cp.Minimize(self.objective), self.constraints)
 
 class MILPSparsifier(LPSparsifier):
     def __init__(self, G, demand, lbda, budget, phi=0, num_samples=24):
@@ -164,10 +179,10 @@ class MILPSparsifier(LPSparsifier):
                              self.solution <= cp.multiply(self.mask,
                                                           self.capacity)]
 
-    def solve(self, verbose=False):
+    def solve(self, verbose=False, solver_verbose=False):
         ''' Solve the LP '''
         self.construct_program()
-        self.prob.solve(solver='GUROBI', verbose=verbose)
+        self.prob.solve(solver='GUROBI', verbose=solver_verbose)
         if self.objective.value is None or np.isinf(self.objective.value):
             print('Sparsification Failed')
             print('Demand cannot be routed under current budget')
@@ -179,7 +194,7 @@ class MILPSparsifier(LPSparsifier):
         self.num_useful_edges = np.sum(self.mask)
         self.solution = self.solution.value
         self.solution[self.mask == 0] = 0
-        if not verbose:
+        if verbose:
             print('Sparsification Successful')
             print('The graph has',self.num_useful_edges,'edges')
         return True

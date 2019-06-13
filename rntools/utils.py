@@ -17,7 +17,7 @@ def add_cost_metric(edge):
     if 'maxspeed' in edge.keys():
         max_speed = np.fromiter(edge['maxspeed'], float).mean()
     length = edge['length']
-    edge['cost'] = length / max_speed * 3.6 #(km/h -> m/s)
+    edge['weight'] = length / max_speed * 3.6 #(km/h -> m/s)
 
 def add_capacity_metric(edge):
     max_speed = 40.0
@@ -41,6 +41,31 @@ def sample_demand(graph, num_od_pairs=10, rate_range=(0,1)):
     N = len(nodes)
     # Sample indices; prevent origin = destination
     sampled_ind = np.random.randint(N,size=(num_od_pairs, 2))
+    for i in range(num_od_pairs):
+        if sampled_ind[i, 0] == sampled_ind[i, 1]:
+            sampled_ind[i, 1] = (sampled_ind[i, 1] + 1) % N
+    sampled_ods = nodes[sampled_ind]
+    # Sample demand rate
+    sampled_rates = np.random.uniform(*rate_range, num_od_pairs)
+    return (sampled_ods[:, 0], sampled_ods[:, 1], sampled_rates)
+
+def sample_biased_demand(graph, num_od_pairs=10, rate_range=(0,1),
+                         noise=0, thres=0.1):
+    # Sample od-pairs
+    nodes = np.fromiter(graph.nodes(), dtype=int)
+    N = len(nodes)
+
+    orig_prob = np.random.exponential(1, size=N) + noise;
+    orig_prob[orig_prob <= thres] = 0
+    orig_prob = orig_prob / sum(orig_prob)
+
+    dest_prob = np.random.exponential(1, size=N) + noise;
+    dest_prob[dest_prob <= thres] = 0
+    dest_prob = dest_prob / sum(dest_prob)
+
+    sampled_ind = np.zeros((num_od_pairs, 2), dtype=int)
+    sampled_ind[:, 0] = np.random.choice(N,num_od_pairs,p=orig_prob)
+    sampled_ind[:, 1] = np.random.choice(N,num_od_pairs,p=dest_prob)
     for i in range(num_od_pairs):
         if sampled_ind[i, 0] == sampled_ind[i, 1]:
             sampled_ind[i, 1] = (sampled_ind[i, 1] + 1) % N
